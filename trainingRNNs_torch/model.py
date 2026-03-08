@@ -10,21 +10,27 @@ import torch.nn.functional as F
 def spectral_radius(mat: np.ndarray) -> float:
     # The spectral radius of a matrix is the largest absolute value of its eigenvalues.
     # mat is (H,H)
-    pass
+    eval, _ = np.linalg.eig(mat)
+    max_val = 0 
+    for e in eval:
+        max_val = max(max_val, abs(e))
+    return max_val
+
 
 
 # DO THIS
 def _tanh_saturation_distance(h: torch.Tensor) -> torch.Tensor:
     """Distance to saturation for tanh outputs in [-1, 1].
     """
-    pass
+    return 1-abs(h)
+
 
 
 # DO THIS
 def _sigmoid_saturation_distance(h: torch.Tensor) -> torch.Tensor:
     """Distance to saturation for sigmoid outputs in [0, 1].
     """
-    pass
+    return torch.minimum(h,1-h)
 
 
 class VanillaRNN(nn.Module):
@@ -138,6 +144,36 @@ class VanillaRNN(nn.Module):
         """
         T, B, _ = u.shape
 
+        # init
+        h_t = torch.zeros(B, self.nhid, device=u.device)
+
+        # storing hidden states and outputs
+        h_list = []
+        o_list = []
+
+        for t in range (T):
+            x_t = u[t]
+
+            h_t = torch.tanh( x_t@self.W_uh + h_t@self.W_hh + self.b_hh  )
+
+            o_t = h_t @ self.W_hy + self.b_hy
+            h_list.append(h_t)
+            o_list.append(o_t)
+
+       
+        h = torch.stack(h_list)      
+        o = torch.stack(o_list)      
+
+        # return format
+        if self.classif_type == "softmax":
+            logits = o.reshape(T * B, self.nout)
+
+        elif self.classif_type in ["lastSoftmax", "lastLinear"]:
+            logits = o[-1]  # last timestep 
+
+        return logits, h
+
+
         # If classif_type is lastSoftmax or lastLinear, you should compute the logits
         # at every step but only return the last step's logits. If classif_type is softmax, you should compute the logits at
         # every step and return all of them flattened into (T*B, nout).
@@ -161,8 +197,8 @@ class VanillaRNN(nn.Module):
     # DO THIS
     def recurrent_weight_for_rho(self) -> torch.Tensor:
         # This needs to return the recurrent weight matrix.
-        pass
-
+        return self.W_hh
+    
     def numpy_state(self) -> dict:
         return {
             "W_hh": self.W_hh.detach().cpu().numpy(),
@@ -248,7 +284,7 @@ class GRUModel(nn.Module):
     def recurrent_weight_for_rho(self) -> torch.Tensor:
         # This needs to return the recurrent weight matrix. There are multiple in
         # the case of the GRU: return the candidate one similar to the RNN case.
-        pass
+        return self.W_hh
 
     def numpy_state(self) -> dict:
         return {
@@ -280,7 +316,67 @@ class GRUModel(nn.Module):
         #   - "r": pre-activation of reset gate r
         #   - "h_tilde": pre-activation of candidate h_tilde
         # See the math in the assignment PDF for details.
-        raise ValueError(f"Unknown classif_type={self.classif_type}")
+        h_t = torch.zeros(B, self.nhid, device=u.device)
+
+        h_list = []
+        o_list = []
+
+        z_pre_list = []
+        r_pre_list = []
+        htilde_pre_list = []
+
+        for t in range(T):
+
+            x_t = u[t]
+
+            # gate pre-activations
+            z_pre = x_t @ self.W_uz + h_t @ self.W_hz + self.b_z
+            r_pre = x_t @ self.W_ur + h_t @ self.W_hr + self.b_r
+
+            z = torch.sigmoid(z_pre)
+            r = torch.sigmoid(r_pre)
+
+            # candidate
+            htilde_pre = x_t @ self.W_uh + (r * h_t) @ self.W_hh + self.b_h
+            h_tilde = torch.tanh(htilde_pre)
+
+            # new hidden state
+            h_t = (1 - z) * h_t + z * h_tilde
+
+            # output
+            o_t = h_t @ self.W_hy + self.b_y
+
+            h_list.append(h_t)
+            o_list.append(o_t)
+
+            if return_extras:
+                z_pre_list.append(z_pre)
+                r_pre_list.append(r_pre)
+                htilde_pre_list.append(htilde_pre)
+
+        h = torch.stack(h_list)
+        o = torch.stack(o_list)
+
+        if self.classif_type == "softmax":
+            logits = o.reshape(T * B, self.nout)
+
+        elif self.classif_type in ["lastSoftmax", "lastLinear"]:
+            logits = o[-1]
+
+        else:
+            raise ValueError(f"Unknown classif_type={self.classif_type}")
+
+        if not return_extras:
+            return logits, h
+
+        extras = {
+            "z": torch.stack(z_pre_list),
+            "r": torch.stack(r_pre_list),
+            "h_tilde": torch.stack(htilde_pre_list),
+        }
+
+        return logits, h, extras    
+       
 
 
 def make_model(

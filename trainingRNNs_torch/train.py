@@ -15,13 +15,13 @@ from model import make_model
 # DO THIS
 def _sigmoid_sat_dist(v: torch.Tensor) -> torch.Tensor:
     # v in [0,1]
-    pass
+    return torch.minimum(v, 1-v)
 
 
 # DO THIS
 def _tanh_sat_dist(v: torch.Tensor) -> torch.Tensor:
     # v in [-1,1]
-    pass
+    return 1-torch.abs(v)
 
 
 def _hidden_sat_time(model, h: torch.Tensor) -> torch.Tensor:
@@ -148,6 +148,30 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
     # Then if extras was passed in and is a dict, and the model is GRU,
     # also compute z_sat_t and r_sat_t using _sigmoid_sat_dist on the gate pre-activations.
 
+    if collect_extras:
+        logits, h, extras = model(x, return_extras=True)
+    else:
+        logits, h = model(x)
+        extras = None
+
+    loss, err = task.loss(logits, y_onehot)
+    dh = torch.autograd.grad(loss, h, retain_graph=True)[0]
+    g_t = torch.norm(dh, dim=2).mean(dim=1)
+    a = 1 - h**2
+    a_t = a.mean(dim=(1,2))
+    
+    sat = _tanh_sat_dist(h)
+    sat_t = sat.mean(dim=(1,2))
+
+    z_sat_t = None
+    r_sat_t = None
+
+    if extras is not None:
+        z = torch.sigmoid(extras["z"])
+        r = torch.sigmoid(extras["r"])
+
+        z_sat_t = _sigmoid_sat_dist(z).mean(dim=(1,2))
+        r_sat_t = _sigmoid_sat_dist(r).mean(dim=(1,2))
     return (
         loss.detach(),
         err.detach(),
@@ -161,7 +185,11 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
 
 # DO THIS
 def global_grad_norm(params):
-    pass
+    total = 0.0
+    for p in params:
+        if p.grad is not None:
+            total += torch.sum(p.grad ** 2)
+    return torch.sqrt(total)
 
 def clip_rescale(params, cutoff: float):
     # rescale grads if global norm > cutoff

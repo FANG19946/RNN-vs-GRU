@@ -154,10 +154,28 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
         logits, h = model(x)
         extras = None
 
-    loss, err = task.loss(logits, y_onehot)
-    dh = torch.autograd.grad(loss, h, retain_graph=True)[0]
+    
+    # For classification tasks
+    if task.classifType in ("lastSoftmax", "softmax"):
+        target = y_onehot.argmax(dim=-1)  # convert one-hot to class indices
+        loss = torch.nn.functional.cross_entropy(logits, target)
+        pred = logits.argmax(dim=-1)
+        err = (pred != target).float().mean()
+
+    # For regression tasks
+    elif task.classifType == "lastLinear":
+        loss = torch.mean((logits - y_onehot) ** 2)
+        err = torch.sqrt(loss)
+
+    else:
+        raise ValueError(f"Unknown classifType {task.classifType}")
+
+
+    dh = torch.autograd.grad(loss, h, retain_graph=True, allow_unused=True)[0]
+    if dh is None:
+        dh = torch.zeros_like(h)
     g_t = torch.norm(dh, dim=2).mean(dim=1)
-    a = 1 - h**2
+    a = model.act_deriv_from_h(h)
     a_t = a.mean(dim=(1,2))
     
     sat = _tanh_sat_dist(h)

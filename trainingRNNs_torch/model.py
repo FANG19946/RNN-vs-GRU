@@ -22,7 +22,7 @@ def spectral_radius(mat: np.ndarray) -> float:
 def _tanh_saturation_distance(h: torch.Tensor) -> torch.Tensor:
     """Distance to saturation for tanh outputs in [-1, 1].
     """
-    return 1-abs(h)
+    return 1-torch.abs(h)
 
 
 
@@ -132,7 +132,7 @@ class VanillaRNN(nn.Module):
         raise RuntimeError("bad act_name")
 
     # DO THIS
-    def forward(self, u: torch.Tensor):
+    def forward(self, u: torch.Tensor, return_extras: bool = False):
         """
         u: (T, B, nin)
         returns:
@@ -145,7 +145,7 @@ class VanillaRNN(nn.Module):
         T, B, _ = u.shape
 
         # init
-        h_t = torch.zeros(B, self.nhid, device=u.device)
+        h_t = torch.zeros(B, self.nhid, device=u.device, requires_grad=True)
 
         # storing hidden states and outputs
         h_list = []
@@ -154,7 +154,7 @@ class VanillaRNN(nn.Module):
         for t in range (T):
             x_t = u[t]
 
-            h_t = torch.tanh( x_t@self.W_uh + h_t@self.W_hh + self.b_hh  )
+            h_t = self.act( x_t@self.W_uh + h_t@self.W_hh + self.b_hh  )
 
             o_t = h_t @ self.W_hy + self.b_hy
             h_list.append(h_t)

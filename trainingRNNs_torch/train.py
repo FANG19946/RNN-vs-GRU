@@ -147,39 +147,34 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
     # Then sat_t using _hidden_sat_time.
     # Then if extras was passed in and is a dict, and the model is GRU,
     # also compute z_sat_t and r_sat_t using _sigmoid_sat_dist on the gate pre-activations.
+    loss, err, logits, h, extras = compute_loss_and_error(
+        task, model, x, y_onehot, return_extras=collect_extras
+    )
 
-    if collect_extras:
-        logits, h, extras = model(x, return_extras=True)
-    else:
-        logits, h = model(x)
-        extras = None
+    # dh = torch.autograd.grad(loss, h, retain_graph=True)[0]
 
-    
-    # For classification tasks
-    if task.classifType in ("lastSoftmax", "softmax"):
-        target = y_onehot.argmax(dim=-1)  # convert one-hot to class indices
-        loss = torch.nn.functional.cross_entropy(logits, target)
-        pred = logits.argmax(dim=-1)
-        err = (pred != target).float().mean()
+    # if dh is None:
+    #     dh = torch.zeros_like(h)
 
-    # For regression tasks
-    elif task.classifType == "lastLinear":
-        loss = torch.mean((logits - y_onehot) ** 2)
-        err = torch.sqrt(loss)
+    # g_t = torch.norm(dh, dim=2).mean(dim=1)
+    # dh = torch.autograd.grad(loss, h, retain_graph=True)[0]
 
-    else:
-        raise ValueError(f"Unknown classifType {task.classifType}")
-
-
+    # g_t = torch.norm(dh, dim=2).mean(dim=1)
     dh = torch.autograd.grad(loss, h, retain_graph=True, allow_unused=True)[0]
+
     if dh is None:
         dh = torch.zeros_like(h)
+
     g_t = torch.norm(dh, dim=2).mean(dim=1)
-    a = model.act_deriv_from_h(h)
-    a_t = a.mean(dim=(1,2))
-    
-    sat = _tanh_sat_dist(h)
-    sat_t = sat.mean(dim=(1,2))
+
+
+    if hasattr(model, "act_deriv_from_h"):
+        a = model.act_deriv_from_h(h)
+        a_t = a.mean(dim=(1,2))
+    else:
+        a_t = torch.zeros(h.shape[0], device=h.device)
+
+    sat_t = _hidden_sat_time(model, h)
 
     z_sat_t = None
     r_sat_t = None
@@ -190,6 +185,7 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
 
         z_sat_t = _sigmoid_sat_dist(z).mean(dim=(1,2))
         r_sat_t = _sigmoid_sat_dist(r).mean(dim=(1,2))
+
     return (
         loss.detach(),
         err.detach(),
@@ -199,6 +195,9 @@ def grad_time_profile(task, model, x: torch.Tensor, y_onehot: torch.Tensor, coll
         None if z_sat_t is None else z_sat_t.detach(),
         None if r_sat_t is None else r_sat_t.detach(),
     )
+  
+
+   
 
 
 # DO THIS

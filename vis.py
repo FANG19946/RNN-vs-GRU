@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-z = np.load("A2_mem_rnn_tanh_clip005_test_final_state.npz")
+z = np.load("A2_mem_rnn_tanh_clip005_adnan_final_state.npz")
 
 grad_time = z["grad_time"]
 

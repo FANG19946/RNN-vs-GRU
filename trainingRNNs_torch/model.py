@@ -145,24 +145,22 @@ class VanillaRNN(nn.Module):
         T, B, _ = u.shape
 
         # init
-        h_t = torch.zeros(B, self.nhid, device=u.device, requires_grad=True)
+        h_t = torch.zeros(B, self.nhid, device=u.device)
 
-        # storing hidden states and outputs
+        # storing hidden states
         h_list = []
-        o_list = []
+
 
         for t in range (T):
             x_t = u[t]
 
             h_t = self.act( x_t@self.W_uh + h_t@self.W_hh + self.b_hh  )
 
-            o_t = h_t @ self.W_hy + self.b_hy
             h_list.append(h_t)
-            o_list.append(o_t)
 
        
-        h = torch.stack(h_list)      
-        o = torch.stack(o_list)      
+        h = torch.stack(h_list)        
+        o = h @ self.W_hy + self.b_hy   # (T,B,nout)    
 
         # return format
         if self.classif_type == "softmax":

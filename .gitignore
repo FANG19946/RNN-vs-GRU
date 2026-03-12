@@ -1,3 +1,4 @@
 __pycache__
 venv
 *.npz
+!A2_mem_rnn_tanh_clip005_adnan_final_state.npz

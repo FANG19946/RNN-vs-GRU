@@ -2,6 +2,7 @@ __pycache__
 venv
 *.npz
 *.bat
+!A1_mem_rnn_tanh_clip001_final_state.npz
 !A2_mem_rnn_tanh_clip005_adnan_final_state.npz
 !A3_mem_rnn_tanh_clip001_final_state.npz
 !A4_mem_gru_noclip_final_state.npz

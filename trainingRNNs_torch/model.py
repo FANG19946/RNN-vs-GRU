@@ -317,7 +317,7 @@ class GRUModel(nn.Module):
         h_t = torch.zeros(B, self.nhid, device=u.device)
 
         h_list = []
-        o_list = []
+        # o_list = []
 
         z_pre_list = []
         r_pre_list = []
@@ -342,10 +342,10 @@ class GRUModel(nn.Module):
             h_t = (1 - z) * h_t + z * h_tilde
 
             # output
-            o_t = h_t @ self.W_hy + self.b_y
+            # o_t = h_t @ self.W_hy + self.b_y
 
             h_list.append(h_t)
-            o_list.append(o_t)
+            # o_list.append(o_t)
 
             if return_extras:
                 z_pre_list.append(z_pre)
@@ -353,13 +353,13 @@ class GRUModel(nn.Module):
                 htilde_pre_list.append(htilde_pre)
 
         h = torch.stack(h_list)
-        o = torch.stack(o_list)
+        # o = torch.stack(o_list)
 
         if self.classif_type == "softmax":
-            logits = o.reshape(T * B, self.nout)
+             logits = (h @ self.W_hy + self.b_y).reshape(T * B, self.nout)
 
         elif self.classif_type in ["lastSoftmax", "lastLinear"]:
-            logits = o[-1]
+            logits = h[-1] @ self.W_hy + self.b_y
 
         else:
             raise ValueError(f"Unknown classif_type={self.classif_type}")
